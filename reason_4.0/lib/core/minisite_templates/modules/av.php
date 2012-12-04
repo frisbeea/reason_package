@@ -47,6 +47,7 @@
 		
 		function init($args = array())
 		{
+			
 			if(isset($this->params['num_per_page']))
 				$this->num_per_page = $this->params['num_per_page'];
 			
@@ -65,8 +66,8 @@
 	
 			parent::init($args);
 		}
-		
-		
+	
+	
 		function alter_es() // {{{
 		{
 			if($this->params['limit_to_current_page'])
@@ -85,6 +86,12 @@
 			$this->es->add_relation( 'show_hide.show_hide = "show"' );
 			$this->es->add_relation( '(media_work.transcoding_status = "ready" OR ISNULL(media_work.transcoding_status) OR media_work.transcoding_status = "")' );
 		} // }}}
+		
+		function post_es_additional_init_actions()
+		{
+			$this->_init_social_media_integration();
+		}
+		
 		function show_item_content( $item ) // {{{
 		{
 			//$this->get_primary_image( $item );
@@ -114,6 +121,7 @@
 			}
 			$this->display_rights_statement($item);
 		} // }}}
+		
 		function get_date_information($item)
 		{
 			$ret = '';
@@ -130,11 +138,13 @@
 			}
 			return $ret;
 		}
+		
 		//Called on by show_list_item()
 		function show_list_item_pre( $item ) // {{{
 		{
 			$this->get_primary_image( $item );
 		}
+		
 		//Called on by show_list_item
 		function show_list_item_desc( $item )
 		{
@@ -143,11 +153,13 @@
 				echo '<div class="desc">'.$item->get_value('description').'</div>'."\n";
 			}
 		}
+		
 		function show_list_item_date( $item )
 		{
 			if($this->use_dates_in_list && ( $item->get_value( 'datetime' )|| $item->get_value('media_publication_datetime') ) )
 				echo '<div class="smallText date">'.$this->get_date_information($item).'</div>'."\n";
 		}
+		
 		function get_primary_image( $item )
 		{
 			if(empty($this->parent->textonly))
@@ -196,6 +208,7 @@
 				}
 			}
 		}
+		
 		function get_cleanup_rules()
 		{
 			$this->cleanup_rules[$this->query_string_frag . '_id'] = array('function' => 'turn_into_int');
@@ -204,6 +217,7 @@
 			$this->cleanup_rules['displayer_height'] = array('function'=>'turn_into_int');
 			return $this->cleanup_rules;
 		}
+		
 		function get_av_files( $item ) // {{{
 		{
 			$avf = new entity_selector();
@@ -212,6 +226,70 @@
 			$avf->set_order('av.media_format ASC, av.av_part_number ASC');
 			return $avf->run_one();
 		}
+		
+		/**
+	 * Init and add needed head items for social media integration.
+	 *
+	 * This is triggered in post_es_additional_init_actions.
+	 *
+	 * @todo add parameters for further integration that this method pays attention to.
+	 */
+	function _init_social_media_integration()
+	{
+		// for now, lets just add sensible open graph tags for the item if we have a current item
+		//if (!empty($this->current_item_id))
+		//{
+			$this->_add_open_graph_tags_for_item();
+		//}
+	}
+	
+
+	/**
+	 * Add basic metadata using the open graph protocol (http://ogp.me/).
+	 *
+	 * This should improve how shared items appear on facebook and possibly other social networks.
+	 *
+	 * @todo add integration with propietary tags for specific social networks.
+	 */
+	function _add_open_graph_tags_for_item()
+	{
+		$item = new entity($this->current_item_id);
+		/*if (reason_is_entity($item, 'news'))
+		{*/
+		$title = htmlspecialchars(trim(strip_tags($item->get_value('name'))),ENT_QUOTES,'UTF-8');
+		$description = htmlspecialchars(trim(str_replace('&nbsp;', '', strip_tags($item->get_value('description')))),ENT_QUOTES,'UTF-8');
+		/*if (empty($description)) // lets look to the content field if description is missing.
+			{
+				$content = htmlspecialchars(trim(str_replace('&nbsp;', '', strip_tags($item->get_value('content')))),ENT_QUOTES,'UTF-8');
+				if (!empty($content))
+				{
+					$words = explode(' ', $content, 31);
+					unset($words[count($words)-1]);
+					$description = implode(' ', $words).'…';
+				}
+		}*/
+		//$url = carl_construct_link(array(''), array('story_id', 'issue_id', 'section_id'));
+		$url = (get_current_url());
+		/*if ($teaser = $this->get_teaser_image($item))
+			{
+				$protocol = (on_secure_page()) ? 'https' : 'http';
+				$teaser = reset($teaser);
+				$image_url = $protocol . '://'.$_SERVER['HTTP_HOST'].reason_get_image_url($teaser);
+		}*/
+		$image_url = 'http://reason_public.test.carleton.edu/reason/images/240619.jpg';
+		$site = new entity($this->site_id);
+		if ($site) $site_name = htmlspecialchars(trim(strip_tags($site->get_value('name'))),ENT_QUOTES,'UTF-8');	
+		$head_items =& $this->get_head_items();
+		$head_items->add_head_item('meta',array( 'property' => 'og:type', 'content' => 'movie'));
+		$head_items->add_head_item('meta',array( 'property' => 'og:title', 'content' => $title ));
+		$head_items->add_head_item('meta',array( 'property' => 'og:url', 'content' => $url));
+		if (!empty($description)) $head_items->add_head_item('meta',array( 'property' => 'og:description', 'content' => $description));
+		if (!empty($image_url)) $head_items->add_head_item('meta',array( 'property' => 'og:image', 'content' => $image_url));
+		if (!empty($site_name)) $head_items->add_head_item('meta',array( 'property' => 'og:site_name', 'content' => $site_name));
+		//}		
+	}
+	
+		
 		
 		function display_media_work($item)
 		{
